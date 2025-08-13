@@ -1,3 +1,17 @@
 {
-	"clangd.path": "~/.config/coc/extensions/coc-clangd-data/install/19.1.2/clangd_19.1.2/bin/clangd"
+	"clangd.path": "~\\AppData\\Local\\coc\\extensions\\coc-clangd-data\\install\\19.1.2\\clangd_19.1.2\\bin\\clangd.exe",
+	"solargraph.useBundler": true,
+	"languageserver": {
+	  "svelte": {
+			"command": "C:\\Users\\twil3\\AppData\\Roaming\\npm\\svelteserver.cmd",
+	    "args": ["--stdio"],
+	    "filetypes": ["svelte"],
+	    "rootPatterns": ["package.json", "tsconfig.json", ".git"],
+	    "initializationOptions": {
+	      "config": {
+	        "enable-ts-plugin": true
+	      }
+	    }
+	  }
+	}
 }

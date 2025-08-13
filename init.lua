@@ -50,7 +50,7 @@ for i = 0, 9 do
   end, { desc = 'Open or switch to tab for ' .. file })
 end
 
-vim.keymap.set('n', '<C-w>', '<Cmd>:wq<CR>', { desc = 'Close current tab' })
+-- vim.keymap.set('n', '<C-w>', '<Cmd>:wq<CR>', { desc = 'Close current tab' })
 
 -- tab settings
 vim.opt.tabstop = 2
@@ -91,7 +91,20 @@ require("lazy").setup({
 	{
 		"neoclide/coc.nvim",
 		branch = "release",
-		build = "npm install",
+		build = "bun install",
+	},
+
+	{
+		'nvim-telescope/telescope.nvim',
+		-- tag = "0.1.x",
+		dependencies = { 'nvim-lua/plenary.nvim' },
+	},
+	{
+		'nvim-telescope/telescope-fzf-native.nvim',
+		build = "make",
+		config = function()
+			require('telescope').load_extension('fzf')
+		end
 	}
 })
 
@@ -262,26 +275,62 @@ keyset("n", "<space>k", ":<C-u>CocPrev<cr>", opts)
 keyset("n", "<space>p", ":<C-u>CocListResume<cr>", opts)
 
 -- color settings (ハイライトの設定)
-vim.cmd("hi Normal ctermbg=none")
-vim.cmd("hi NonText ctermbg=none")
-vim.cmd("hi LineNr ctermbg=none")
-vim.cmd("hi Folded ctermbg=none")
-vim.cmd("hi EndOfBuffer ctermbg=none")
-vim.cmd("hi CursorLine ctermbg=none")
-vim.cmd("hi CursorLineNr ctermbg=none")
-vim.cmd("hi SignColumn ctermbg=none")
+vim.cmd("hi Normal ctermbg=none guibg=none")
+vim.cmd("hi NonText ctermbg=none guibg=none")
+vim.cmd("hi LineNr ctermbg=none guibg=none")
+vim.cmd("hi Folded ctermbg=none guibg=none")
+vim.cmd("hi EndOfBuffer ctermbg=none guibg=none")
+vim.cmd("hi CursorLine ctermbg=none guibg=none")
+vim.cmd("hi CursorLineNr ctermbg=none guibg=none")
+vim.cmd("hi SignColumn ctermbg=none guibg=none")
 
 -- toggle comment out
 local function toggle_comment()
+  -- ファイルタイプとコメント文字のマッピング
+  local comment_map = {
+    c = '//',
+    cpp = '//',
+    rust = '//',
+    javascript = '//',
+    typescript = '//',
+    javascriptreact = '//',
+    typescriptreact = '//',
+    python = '#',
+    ruby = '#',
+    sh = '#',
+    lua = '--',
+    sql = '--',
+    go = '//',
+  }
+
+  local ft = vim.bo.filetype
+  local comment_string = comment_map[ft]
+
+  -- マップにないファイルタイプの場合は何もしない
+  if not comment_string then
+    print("このファイルタイプに対応するコメント文字が設定されていません。")
+    return
+  end
+
+  -- Luaのパターンで特別な意味を持つ文字をエスケープ
+  local escaped_comment = comment_string:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
+
+  -- 動的に正規表現パターンを生成
+  local match_pattern = '^%s*' .. escaped_comment
+  local remove_pattern = '(%s*)' .. escaped_comment .. ' ?'
+  local add_prefix = '%1' .. comment_string .. ' '
+
   local mode = vim.fn.mode()
   if mode == 'n' then
     -- ノーマルモードの処理
     local line = vim.api.nvim_get_current_line()
-    if line:match('^%s*//') then
-      local new_line = line:gsub('(%s*)// ?', '%1', 1)
+    if line:match(match_pattern) then
+      -- コメント解除
+      local new_line = line:gsub(remove_pattern, '%1', 1)
       vim.api.nvim_set_current_line(new_line)
     else
-      local new_line = line:gsub('^(%s*)', '%1// ', 1)
+      -- コメント追加
+      local new_line = line:gsub('^(%s*)', add_prefix, 1)
       vim.api.nvim_set_current_line(new_line)
     end
   elseif mode == 'V' then
@@ -294,13 +343,12 @@ local function toggle_comment()
 
     local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
 
-    -- 各行のコメント有無を調べる
     local has_comment = false
     local no_comment = false
     for _, line in ipairs(lines) do
-      if line:match('^%s*//') then
+      if line:match(match_pattern) then
         has_comment = true
-      else
+      elseif not line:match('^%s*$') then -- 空行は無視
         no_comment = true
       end
     end
@@ -318,10 +366,14 @@ local function toggle_comment()
     end
 
     for i, line in ipairs(lines) do
-      if action == 'add' then
-        lines[i] = line:gsub('^(%s*)', '%1// ', 1)
-      elseif action == 'remove' then
-        lines[i] = line:gsub('(%s*)// ?', '%1', 1)
+      if not line:match('^%s*$') then -- 空行は無視
+        if action == 'add' then
+          if not line:match(match_pattern) then -- 既にコメントされている行は追加しない
+            lines[i] = line:gsub('^(%s*)', add_prefix, 1)
+          end
+        elseif action == 'remove' then
+          lines[i] = line:gsub(remove_pattern, '%1', 1)
+        end
       end
     end
 
@@ -329,5 +381,38 @@ local function toggle_comment()
   end
 end
 
-vim.keymap.set({'n', 'v'}, '<C-_>', toggle_comment, { desc = '行頭に//をトグルする' })
+-- キーマッピングは変更なし
+vim.keymap.set({'n', 'v'}, '<C-_>', toggle_comment, { desc = '行頭に//や#などをトグルする' })
 
+
+
+-- Telescopeの基本設定
+require('telescope').setup{
+  defaults = {
+    file_ignore_patterns = {
+			"node_modules",
+			"dist",
+			".vscode",
+			".git"
+		}
+  }
+}
+
+-- Telescopeの便利なキーマッピング
+local builtin = require('telescope.builtin')
+-- ファイルを検索
+vim.keymap.set('n', '<leader>ff', builtin.find_files, { desc = 'Find files' })
+-- プロジェクト全体をGrep検索
+vim.keymap.set('n', '<leader>fg', builtin.live_grep, { desc = 'Live grep' }) 
+-- 開いているバッファを検索
+vim.keymap.set('n', '<leader>fb', builtin.buffers, { desc = 'Find buffers' }) 
+-- ヘルプタグを検索
+vim.keymap.set('n', '<leader>fh', builtin.help_tags, { desc = 'Find help tags' }) 
+-- カーソル上の定義を検索して選択
+vim.keymap.set('n', '<leader>ld', builtin.lsp_definitions, { desc = 'LSP Definitions' })
+-- カーソル上の参照を検索
+vim.keymap.set('n', '<leader>lr', builtin.lsp_references, { desc = 'LSP References' })
+-- ドキュメント内シンボル一覧
+vim.keymap.set('n', '<leader>ls', builtin.lsp_document_symbols, { desc = 'LSP Document Symbols' })
+-- ワークスペース全体のシンボル一覧
+vim.keymap.set('n', '<leader>lw', builtin.lsp_workspace_symbols, { desc = 'LSP Workspace Symbols' })
